@@ -93,6 +93,17 @@ import p90 from "./xai.js";
 import p91 from "./xiaomi-mimo.js";
 import p92 from "./xiaomi-tokenplan.js";
 import p93 from "./youcom.js";
+import p94 from "./api-airforce.js";
+import p95 from "./bazaarlink.js";
+import p96 from "./bluesminds.js";
+import p97 from "./deepinfra.js";
+import p98 from "./inclusionai.js";
+import p99 from "./inference-net.js";
+import p100 from "./llm7.js";
+import p101 from "./nscale.js";
+import p102 from "./ollama-cloud.js";
+import p103 from "./sambanova.js";
+import p104 from "./venice.js";
 
 export default [
   p0,
@@ -188,5 +199,16 @@ export default [
   p90,
   p91,
   p92,
-  p93
+  p93,
+  p94,
+  p95,
+  p96,
+  p97,
+  p98,
+  p99,
+  p100,
+  p101,
+  p102,
+  p103,
+  p104
 ];

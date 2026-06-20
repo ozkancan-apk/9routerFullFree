@@ -1,0 +1,36 @@
+export default {
+  id: "sambanova",
+  priority: 30,
+  hasFree: true,
+  alias: "samba",
+  display: {
+    name: "SambaNova (Free)",
+    icon: "developer_board",
+    color: "#8B5CF6",
+    textIcon: "SN",
+    website: "https://sambanova.ai",
+    notice: {
+      text: "Free tier: 6M tokens/month. Sign up at sambanova.ai for API key.",
+      apiKeyUrl: "https://cloud.sambanova.com",
+    },
+  },
+  category: "freeTier",
+  transport: {
+    baseUrl: "https://api.sambanova.ai/v1/chat/completions",
+    format: "openai",
+    authType: "apikey",
+    authHeader: "bearer",
+  },
+  models: [
+    { id: "Meta-Llama-3.3-70B-Instruct", name: "Llama 3.3 70B" },
+    { id: "Meta-Llama-3.1-405B-Instruct", name: "Llama 3.1 405B" },
+    { id: "Meta-Llama-3.1-8B-Instruct", name: "Llama 3.1 8B" },
+    { id: "Llama-4-Scout-17B-16E", name: "Llama 4 Scout 17B" },
+    { id: "Llama-4-Maverick-17B-128E", name: "Llama 4 Maverick 17B" },
+    { id: "Qwen3-235B-A22B", name: "Qwen3 235B" },
+    { id: "Qwen3-32B", name: "Qwen3 32B" },
+    { id: "DeepSeek-V3-0324", name: "DeepSeek V3" },
+    { id: "DeepSeek-R1-0528", name: "DeepSeek R1" },
+    { id: "Qwen2.5-Coder-32B-Instruct", name: "Qwen 2.5 Coder 32B" },
+  ],
+};

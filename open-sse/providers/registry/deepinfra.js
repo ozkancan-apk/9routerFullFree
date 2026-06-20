@@ -1,0 +1,36 @@
+export default {
+  id: "deepinfra",
+  priority: 30,
+  hasFree: true,
+  alias: "deepinfra",
+  display: {
+    name: "DeepInfra (Free)",
+    icon: "cloud",
+    color: "#FF6B35",
+    textIcon: "DI",
+    website: "https://deepinfra.com",
+    notice: {
+      text: "Free tier available. Sign up for API key.",
+      apiKeyUrl: "https://deepinfra.com/dash/api_keys",
+    },
+  },
+  category: "freeTier",
+  transport: {
+    baseUrl: "https://api.deepinfra.com/v1/openai/chat/completions",
+    format: "openai",
+    authType: "apikey",
+    authHeader: "bearer",
+  },
+  models: [
+    { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B" },
+    { id: "meta-llama/Meta-Llama-3.1-405B-Instruct", name: "Llama 3.1 405B" },
+    { id: "meta-llama/Llama-4-Scout-17B-16E", name: "Llama 4 Scout 17B" },
+    { id: "meta-llama/Llama-4-Maverick-17B-128E", name: "Llama 4 Maverick 17B" },
+    { id: "Qwen/Qwen3-235B-A22B", name: "Qwen3 235B" },
+    { id: "Qwen/Qwen3-32B", name: "Qwen3 32B" },
+    { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen 2.5 Coder 32B" },
+    { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3" },
+    { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1", supportsReasoning: true },
+    { id: "mistralai/Mistral-Small-24B-Instruct-2501", name: "Mistral Small 24B" },
+  ],
+};
