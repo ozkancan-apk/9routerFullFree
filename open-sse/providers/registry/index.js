@@ -104,6 +104,7 @@ import p101 from "./nscale.js";
 import p102 from "./ollama-cloud.js";
 import p103 from "./sambanova.js";
 import p104 from "./venice.js";
+import p105 from "./pollinations.js";
 
 export default [
   p0,
@@ -210,5 +211,6 @@ export default [
   p101,
   p102,
   p103,
-  p104
+  p104,
+  p105
 ];
