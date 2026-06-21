@@ -9,11 +9,13 @@ const path = require("path");
 const BETTER_SQLITE3_VERSION = "12.6.2";
 const SQL_JS_VERSION = "1.14.1";
 
+const { name: APP_NAME } = require("../package.json");
+
 function getDataDir() {
   if (process.env.DATA_DIR) return process.env.DATA_DIR;
   return process.platform === "win32"
-    ? path.join(process.env.APPDATA || os.homedir(), "9router")
-    : path.join(os.homedir(), ".9router");
+    ? path.join(process.env.APPDATA || os.homedir(), APP_NAME)
+    : path.join(os.homedir(), `.${APP_NAME}`);
 }
 
 function getRuntimeDir() {
@@ -32,7 +34,7 @@ function ensureRuntimeDir() {
   const pkgPath = path.join(dir, "package.json");
   if (!fs.existsSync(pkgPath)) {
     fs.writeFileSync(pkgPath, JSON.stringify({
-      name: "9router-runtime",
+      name: "fullfree9router-runtime",
       version: "1.0.0",
       private: true,
       description: "User-writable runtime deps for 9router (better-sqlite3 native binary)",
