@@ -1,17 +1,15 @@
 <div align="center">
   <img src="./images/9router.png?1" alt="9Router Dashboard" width="800"/>
   
-  # 9Router - FREE AI Router & Token Saver
+  # 9Router FULL FREE - AI Router + Extra Free Providers
   
-  **Never stop coding. Save 20-40% tokens with RTK + auto-fallback to FREE & cheap AI models.**
+  **9Router fork with additional free-tier & zero-auth AI providers. Same RTK token saver, more free models.**
   
   **Connect All AI Code Tools (Claude Code, Cursor, Antigravity, Copilot, Codex, Gemini, OpenCode, Cline, OpenClaw...) to 40+ AI Providers & 100+ Models.**
   
-  [![npm](https://img.shields.io/npm/v/9router.svg)](https://www.npmjs.com/package/9router)
-  [![Downloads](https://img.shields.io/npm/dm/9router.svg)](https://www.npmjs.com/package/9router)
-  [![Docker Pulls](https://img.shields.io/docker/pulls/decolua/9router.svg?logo=docker&label=Docker%20pulls)](https://hub.docker.com/r/decolua/9router)
-  [![GHCR](https://img.shields.io/badge/GHCR-decolua%2F9router-blue?logo=github)](https://github.com/decolua/9router/pkgs/container/9router)
-  [![License](https://img.shields.io/npm/l/9router.svg)](https://github.com/decolua/9router/blob/main/LICENSE)
+  [![npm](https://img.shields.io/npm/v/fullfree9router.svg)](https://www.npmjs.com/package/fullfree9router)
+  [![Downloads](https://img.shields.io/npm/dm/fullfree9router.svg)](https://www.npmjs.com/package/fullfree9router)
+  [![License](https://img.shields.io/npm/l/9router.svg)](https://github.com/ozkancan-apk/9routerFullFree/blob/main/LICENSE)
 
   <a href="https://trendshift.io/repositories/22628" target="_blank"><img src="https://trendshift.io/api/badge/repositories/22628" alt="decolua%2F9router | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
   
@@ -20,9 +18,16 @@
   [🇻🇳 Tiếng Việt](./i18n/README.vi.md) • [🇨🇳 中文](./i18n/README.zh-CN.md) • [🇯🇵 日本語](./i18n/README.ja-JP.md) • [🇷🇺 Русский](./i18n/README.ru.md)
 </div>
 
+> **⚡ FULL FREE Edition** — This fork adds **13+ extra free-tier providers** not in upstream 9router:
+> api-airforce, bazaarlink, bluesminds, deepinfra, freeaiapikey, inclusionai, inference-net,
+> llm7, nscale, ollama-cloud, pollinations (keyless!), sambanova, venice
+>
+> Plus upstream bugfixes: Next.js 16 CLI build fix, silenced DATA_DIR warnings, OpenCode Go Kimi temp fix.
+> Install: `npm i -g fullfree9router`
+
 ---
 
-## 🤔 Why 9Router?
+## 🤔 Why 9Router FULL FREE?
 
 **Stop wasting money, tokens and hitting limits:**
 
@@ -75,8 +80,8 @@ Result: Never stop coding, minimal cost + 20-40% token savings via RTK
 **1. Install globally:**
 
 ```bash
-npm install -g 9router
-9router
+npm install -g fullfree9router
+fullfree9router
 ```
 
 🎉 Dashboard opens at `http://localhost:20128`
@@ -288,7 +293,7 @@ Default URLs:
   </table>
 </div>
 
-### 🆓 Free Providers
+### 🆓 Free Providers (Original)
 
 <div align="center">
   <table>
@@ -313,6 +318,34 @@ Default URLs:
 </div>
 
 > **Note:** iFlow, Qwen and Gemini CLI free tiers were discontinued in 2026. Use Kiro / OpenCode Free / Vertex instead.
+
+### 🆓🆓 Extra Free Providers (FULL FREE Edition Only)
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="150"><b>Pollinations</b><br/><sub>Keyless! OpenAI, Qwen,<br/>Mistral, DeepSeek, Grok,<br/>Gemini Flash Lite, Kimi</sub></td>
+      <td align="center" width="150"><b>DeepInfra</b><br/><sub>Llama, Qwen, Mixtral,<br/>DeepSeek, Gemma<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>SambaNova</b><br/><sub>Llama 4, Qwen 3,<br/>DeepSeek V3/R1<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>FreeAIAPIKey</b><br/><sub>GPT-5, Claude Opus/Sonnet 4.6,<br/>Qwen 3.5 VL<br/>Free API key</sub></td>
+    </tr>
+    <tr>
+      <td align="center" width="150"><b>Inference.Net</b><br/><sub>Llama 4, Qwen 3,<br/>DeepSeek, Mistral<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>Venice</b><br/><sub>Llama 4, DeepSeek,<br/>Qwen, Gemini<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>NScale</b><br/><sub>Llama 4, Qwen 3,<br/>DeepSeek, Mistral<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>BluesMinds</b><br/><sub>Llama 4, Qwen 3,<br/>DeepSeek V3<br/>Free API key</sub></td>
+    </tr>
+    <tr>
+      <td align="center" width="150"><b>API AirForce</b><br/><sub>Llama 4, Qwen,<br/>Gemini Flash, Mistral<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>BazaarLink</b><br/><sub>OpenAI, Claude,<br/>Gemini, Qwen<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>LLM7</b><br/><sub>Llama, Qwen,<br/>DeepSeek, Gemma<br/>Free API key</sub></td>
+      <td align="center" width="150"><b>InclusionAI</b><br/><sub>Llama 4, Qwen,<br/>DeepSeek, Mistral<br/>Free API key</sub></td>
+    </tr>
+    <tr>
+      <td align="center" width="150"><b>Ollama Cloud</b><br/><sub>Llama 4, Qwen,<br/>DeepSeek, Mistral<br/>Free API key</sub></td>
+    </tr>
+  </table>
+</div>
 
 ### 🔑 API Key Providers (40+)
 
