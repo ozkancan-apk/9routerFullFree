@@ -105,6 +105,7 @@ import p102 from "./ollama-cloud.js";
 import p103 from "./sambanova.js";
 import p104 from "./venice.js";
 import p105 from "./pollinations.js";
+import p106 from "./freeaiapikey.js";
 
 export default [
   p0,
@@ -212,5 +213,6 @@ export default [
   p102,
   p103,
   p104,
-  p105
+  p105,
+  p106
 ];
