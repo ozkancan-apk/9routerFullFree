@@ -141,8 +141,8 @@ let standaloneRootToUse = fs.existsSync(standaloneRootResolved) ? standaloneRoot
 const pkgName = path.basename(appDir);
 const nestedRoot = path.join(standaloneRootToUse, pkgName);
 if (fs.existsSync(path.join(nestedRoot, "server.js")) && !fs.existsSync(path.join(standaloneRootToUse, "server.js"))) {
- console.log(`ℹ️  Detected nested standalone output: ${pkgName}/`);
- standaloneRootToUse = nestedRoot;
+  console.log(`ℹ️  Detected nested standalone output: ${pkgName}/`);
+  standaloneRootToUse = nestedRoot;
 }
 const standaloneApp = fs.existsSync(path.join(standaloneRootToUse, "server.js"))
   ? standaloneRootToUse
