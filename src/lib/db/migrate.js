@@ -263,16 +263,20 @@ export async function runMigrationOnce(adapter) {
     console.log(`[DB][migrate] JSON → SQLite in ${Date.now() - t0}ms | legacy JSON kept at DATA_DIR | backup: ${backupDir}`);
 
     // Also try importing from original 9router DB after legacy JSON
-    importFrom9RouterDb(adapter, DB_DIR);
+    await importFrom9RouterDb(adapter, DB_DIR);
     return;
   }
 
-  // Fresh DB with no legacy JSON — try importing from original 9router DB
   if (fresh) {
     setMetaSync(adapter, "appVersion", getAppVersion());
-    importFrom9RouterDb(adapter, DB_DIR);
+
+    // Try importing from original 9router DB on first boot
+    await importFrom9RouterDb(adapter, DB_DIR);
     return;
   }
+
+  // Non-fresh DB: still try 9router import if marker missing (e.g. upgrade from broken v0.5.9)
+  await importFrom9RouterDb(adapter, DB_DIR);
 
   // 4. App version bump → backup data.sqlite (safety net before user-side upgrade)
   const oldVer = getMetaSync(adapter, "appVersion", null);

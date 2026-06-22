@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { createRequire } from "node:module";
 import { stringifyJson } from "./helpers/jsonCol.js";
 
 const ORIG_APP_NAME = "9router";
@@ -15,15 +14,18 @@ function getOrigDataDir() {
 }
 
 function getOrigDbPath() {
-  return path.join(getOrigDataDir(), "db", "data.sqlite");
+  const p = path.join(getOrigDataDir(), "db", "data.sqlite");
+  // node:sqlite (Node 22+) on Windows needs forward slashes
+  if (process.platform === "win32") return p.replace(/\\/g, "/");
+  return p;
 }
 
 /**
- * Import providerConnections and apiKeys from original 9router SQLite DB.
- * Runs only once on fresh DB. Marker file prevents re-import.
- * Uses better-sqlite3 (or node:sqlite 22+) to read the source DB.
+ * Read providerConnections and apiKeys from original 9router SQLite DB.
+ * Uses node:sqlite if available (Node >= 22.5), otherwise better-sqlite3.
+ * Called on first boot only. Marker file prevents re-import.
  */
-export function importFrom9RouterDb(adapter, dbDir) {
+export async function importFrom9RouterDb(adapter, dbDir) {
   const markerPath = path.join(dbDir, MIGRATED_MARKER);
   if (fs.existsSync(markerPath)) {
     return false;
@@ -37,100 +39,115 @@ export function importFrom9RouterDb(adapter, dbDir) {
   console.log(`[DB][migrate] Found original 9router DB at ${origDbPath}`);
   console.log(`[DB][migrate] Importing provider connections and API keys...`);
 
-  let origDb = null;
+  let result;
   try {
-    // Try Node 22+ built-in node:sqlite (ESM-safe, no native deps)
-    const require = createRequire(import.meta.url);
-    try {
-      const { DatabaseSync } = require("node:sqlite");
-      origDb = new DatabaseSync(origDbPath, { readOnly: true, allowLoadExtension: false });
-    } catch {
-      // Fallback to better-sqlite3 (installed via runtime)
-      const BetterSqlite3 = createRequire(origDbPath)("better-sqlite3");
-      origDb = new BetterSqlite3(origDbPath, { readonly: true, fileMustExist: true });
-    }
+    // Use node:sqlite (built-in Node 22.5+)
+    const { DatabaseSync } = await import("node:sqlite");
+    const origDb = new DatabaseSync(origDbPath);
+
+    result = doImport(origDb, adapter);
+
+    origDb.close();
   } catch (err) {
-    console.warn(`[DB][migrate] Cannot open original 9router DB: ${err.message}`);
-    return false;
+    // Fallback: better-sqlite3 via the project's runtime NODE_PATH
+    console.log(`[DB][migrate] node:sqlite failed (${err.message}), trying better-sqlite3...`);
+    try {
+      const { createRequire } = await import("node:module");
+      const require_ = createRequire(
+        path.join(getOrigDataDir(), "..", "9router", "runtime", "node_modules", "better-sqlite3", "package.json")
+      );
+      const BetterSqlite3 = require_("better-sqlite3");
+      const origDb = new BetterSqlite3(origDbPath, { readonly: true, fileMustExist: true });
+      result = doImport(origDb, adapter);
+      origDb.close();
+    } catch (err2) {
+      console.warn(`[DB][migrate] cannot open original 9router DB: ${err2.message}`);
+      return false;
+    }
   }
 
-  function queryAll(sql) {
-    if (typeof origDb.prepare === "function") {
-      // better-sqlite3
-      return origDb.prepare(sql).all();
-    }
-    // node:sqlite
-    const stmt = origDb.prepare(sql);
-    const rows = stmt.all();
-    stmt.free?.();
-    return rows;
+  if (result !== false) {
+    try { fs.writeFileSync(markerPath, new Date().toISOString()); } catch {}
+    console.log(`[DB][migrate] 9router import done (marker: ${markerPath})`);
+    return true;
+  }
+  return false;
+}
+
+function doImport(origDb, adapter) {
+  const isBetterSqlite = typeof origDb.prepare === "function";
+  const isNodeSqlite = typeof origDb.prepare === "function" && origDb.prepare.length === 2;
+
+  function qAll(sql) {
+    if (isBetterSqlite) return origDb.prepare(sql).all();
+    return origDb.prepare(sql).all();
   }
 
-  function queryGet(sql) {
-    if (typeof origDb.prepare === "function") {
-      // better-sqlite3
-      return origDb.prepare(sql).get();
-    }
-    // node:sqlite
-    const stmt = origDb.prepare(sql);
-    const row = stmt.get();
-    stmt.free?.();
-    return row || null;
+  function qGet(sql) {
+    if (isBetterSqlite) return origDb.prepare(sql).get();
+    return origDb.prepare(sql).get();
   }
 
   try {
     adapter.transaction(() => {
+      // Check if we have tables
+      const tables = qAll("SELECT name FROM sqlite_master WHERE type='table'");
+      const tableNames = new Set(tables.map(t => t.name));
+
       // Import providerConnections
       let connCount = 0;
-      try {
-        const connections = queryAll("SELECT * FROM providerConnections");
-        for (const row of connections) {
-          const data = (() => { try { return JSON.parse(row.data); } catch { return {}; } })();
-          adapter.run(
-            `INSERT OR REPLACE INTO providerConnections(id, provider, authType, name, email, priority, isActive, data, createdAt, updatedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [row.id, row.provider, row.authType || "oauth", row.name || null, row.email || null, row.priority || null, row.isActive === false ? 0 : 1, stringifyJson(data), row.createdAt || new Date().toISOString(), row.updatedAt || new Date().toISOString()]
-          );
-          connCount++;
+      if (tableNames.has("providerConnections")) {
+        try {
+          const connections = qAll("SELECT * FROM providerConnections");
+          for (const row of connections) {
+            const data = (() => { try { return JSON.parse(row.data); } catch { return {}; } })();
+            adapter.run(
+              `INSERT OR REPLACE INTO providerConnections(id, provider, authType, name, email, priority, isActive, data, createdAt, updatedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [row.id, row.provider, row.authType || "oauth", row.name || null, row.email || null, row.priority || null, row.isActive === false ? 0 : 1, stringifyJson(data), row.createdAt || new Date().toISOString(), row.updatedAt || new Date().toISOString()]
+            );
+            connCount++;
+          }
+        } catch (e) {
+          console.warn(`[DB][migrate] providerConnections error: ${e.message}`);
         }
-      } catch (e) {
-        console.warn(`[DB][migrate] providerConnections not found in source: ${e.message}`);
       }
 
       // Import apiKeys
       let keyCount = 0;
-      try {
-        const keys = queryAll("SELECT * FROM apiKeys");
-        for (const row of keys) {
-          adapter.run(
-            `INSERT OR REPLACE INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, ?)`,
-            [row.id, row.key, row.name || null, row.machineId || null, row.isActive === false ? 0 : 1, row.createdAt || new Date().toISOString()]
-          );
-          keyCount++;
+      if (tableNames.has("apiKeys")) {
+        try {
+          const keys = qAll("SELECT * FROM apiKeys");
+          for (const row of keys) {
+            adapter.run(
+              `INSERT OR REPLACE INTO apiKeys(id, key, name, machineId, isActive, createdAt) VALUES(?, ?, ?, ?, ?, ?)`,
+              [row.id, row.key, row.name || null, row.machineId || null, row.isActive === false ? 0 : 1, row.createdAt || new Date().toISOString()]
+            );
+            keyCount++;
+          }
+        } catch (e) {
+          console.warn(`[DB][migrate] apiKeys error: ${e.message}`);
         }
-      } catch (e) {
-        console.warn(`[DB][migrate] apiKeys not found in source: ${e.message}`);
       }
 
       // Import settings if none exist
-      try {
-        const existingSettings = adapter.get("SELECT id FROM settings WHERE id = 1");
-        if (!existingSettings) {
-          const settings = queryGet("SELECT data FROM settings WHERE id = 1");
-          if (settings?.data) {
-            adapter.run("INSERT INTO settings(id, data) VALUES(1, ?)", [settings.data]);
+      if (tableNames.has("settings")) {
+        try {
+          const existingSettings = adapter.get("SELECT id FROM settings WHERE id = 1");
+          if (!existingSettings) {
+            const settings = qGet("SELECT data FROM settings WHERE id = 1");
+            if (settings?.data) {
+              adapter.run("INSERT INTO settings(id, data) VALUES(1, ?)", [settings.data]);
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       console.log(`[DB][migrate] Imported ${connCount} connections, ${keyCount} API keys from original 9router`);
     });
 
-    try { fs.writeFileSync(markerPath, new Date().toISOString()); } catch {}
     return true;
   } catch (err) {
     console.error(`[DB][migrate] Failed to import from 9router: ${err.message}`);
     return false;
-  } finally {
-    try { origDb.close?.(); } catch {}
   }
 }
