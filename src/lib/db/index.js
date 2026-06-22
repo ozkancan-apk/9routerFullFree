@@ -169,3 +169,6 @@ export async function importDb(payload) {
 export async function initDb() {
   await getAdapter();
 }
+
+// 9router DB import for first-run migration
+export { importFrom9RouterDb } from "./importFrom9Router.js";

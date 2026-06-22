@@ -7,6 +7,7 @@ import { getMetaSync, setMetaSync } from "./helpers/metaStore.js";
 import { makeBackupDir, backupFile, pruneOldBackups } from "./backup.js";
 import { getAppVersion } from "./version.js";
 import { stringifyJson } from "./helpers/jsonCol.js";
+import { importFrom9RouterDb } from "./importFrom9Router.js";
 
 // Marker file: prevents re-importing legacy JSON when user wipes data.sqlite.
 const MIGRATED_MARKER = path.join(DB_DIR, ".migrated-from-json");
@@ -260,11 +261,16 @@ export async function runMigrationOnce(adapter) {
     try { fs.writeFileSync(MIGRATED_MARKER, new Date().toISOString()); } catch {}
     pruneOldBackups();
     console.log(`[DB][migrate] JSON → SQLite in ${Date.now() - t0}ms | legacy JSON kept at DATA_DIR | backup: ${backupDir}`);
+
+    // Also try importing from original 9router DB after legacy JSON
+    importFrom9RouterDb(adapter, DB_DIR);
     return;
   }
 
+  // Fresh DB with no legacy JSON — try importing from original 9router DB
   if (fresh) {
     setMetaSync(adapter, "appVersion", getAppVersion());
+    importFrom9RouterDb(adapter, DB_DIR);
     return;
   }
 

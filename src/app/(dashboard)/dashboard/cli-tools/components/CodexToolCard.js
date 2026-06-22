@@ -164,12 +164,12 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
 
     const effectiveSubagentModel = subagentModel || selectedModel;
 
-    const configContent = `# 9Router Configuration for Codex CLI
+    const configContent = `# FF9Router Configuration for Codex CLI
 model = "${selectedModel}"
 model_provider = "9router"
 
 [model_providers.9router]
-name = "9Router"
+name = "FF9Router"
 base_url = "${getEffectiveBaseUrl()}"
 wire_api = "responses"
 
