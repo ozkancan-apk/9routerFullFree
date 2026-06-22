@@ -106,6 +106,7 @@ import p103 from "./sambanova.js";
 import p104 from "./venice.js";
 import p105 from "./pollinations.js";
 import p106 from "./freeaiapikey.js";
+import p107 from "./uncloseai.js";
 
 export default [
   p0,
@@ -214,5 +215,6 @@ export default [
   p103,
   p104,
   p105,
-  p106
+  p106,
+  p107
 ];
