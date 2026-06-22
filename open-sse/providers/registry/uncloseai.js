@@ -23,7 +23,6 @@ export default {
   },
   models: [
     { id: "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic", name: "Hermes 3 8B" },
-    { id: "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic", name: "Hermes 3 8B (alt)" },
   ],
   modelsFetcher: { url: "https://hermes.ai.unturf.com/v1/models", type: "openai" },
   passthroughModels: true,
