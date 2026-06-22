@@ -8,71 +8,54 @@ export const ERROR_TYPES = {
   406: { type: "invalid_request_error", code: "model_not_supported" },
   429: { type: "rate_limit_error", code: "rate_limit_exceeded" },
   500: { type: "server_error", code: "internal_server_error" },
-  502: { type: "server_error", code: "bad_gateway" },
-  503: { type: "server_error", code: "service_unavailable" },
-  504: { type: "server_error", code: "gateway_timeout" }
 };
 
-// Default error messages per status code (client-facing)
-export const DEFAULT_ERROR_MESSAGES = {
-  400: "Bad request",
-  401: "Invalid API key provided",
-  402: "Payment required",
-  403: "You exceeded your current quota",
-  404: "Model not found",
-  406: "Model not supported",
-  429: "Rate limit exceeded",
-  500: "Internal server error",
-  502: "Bad gateway - upstream provider error",
-  503: "Service temporarily unavailable",
-  504: "Gateway timeout"
-};
-
-// Exponential backoff config for rate limits
-export const BACKOFF_CONFIG = {
-  base: 2000,
-  max: 5 * 60 * 1000,
-  maxLevel: 15
-};
-
-// Default cooldown for transient/unknown errors
-export const TRANSIENT_COOLDOWN_MS = 30 * 1000;
-
-// Hard cap for provider-reported rate limit cooldown (e.g. codex resets_at can be 5-6h)
-export const MAX_RATE_LIMIT_COOLDOWN_MS = 30 * 60 * 1000;
-
-// Cooldown durations (ms)
-const COOLDOWN = {
-  long: 2 * 60 * 1000,
-  short: 5 * 1000,
-};
+// Cooldown durations
+const COOLDOWN = { short: 15_000, long: 30_000 };
+export const TRANSIENT_COOLDOWN_MS = 2_000;
 
 /**
- * Unified error classification rules.
- * Checked top-to-bottom: text rules first (by order), then status rules.
- * Each rule: { text?, status?, cooldownMs?, backoff? }
- *   - text: substring match (case-insensitive) on error message
+ * Error handling config.
+ * Both text and status rules are evaluated in order (higher first).
+ * Return { shouldFallback: true, cooldownMs } for combo to skip the model.
+ *
+ * Fields per rule:
+ *   - text: error message substring match
  *   - status: HTTP status code match
  *   - cooldownMs: fixed cooldown duration
  *   - backoff: true = use exponential backoff (rate limit)
  */
 export const ERROR_RULES = [
   // --- Text-based rules (checked first, order = priority) ---
-  { text: "no credentials",           cooldownMs: COOLDOWN.long },
-  { text: "request not allowed",      cooldownMs: COOLDOWN.short },
-  { text: "improperly formed request", cooldownMs: COOLDOWN.long },
-  { text: "rate limit",               backoff: true },
-  { text: "too many requests",        backoff: true },
-  { text: "quota exceeded",           backoff: true },
-  { text: "capacity",                 backoff: true },
-  { text: "overloaded",               backoff: true },
+  { text: "no credentials",               cooldownMs: COOLDOWN.long },
+  { text: "request not allowed",          cooldownMs: COOLDOWN.short },
+  { text: "improperly formed request",   cooldownMs: COOLDOWN.long },
+  { text: "end of life",                 cooldownMs: COOLDOWN.long },
+  { text: "no longer available",          cooldownMs: COOLDOWN.long },
+  { text: "deprecated",                  cooldownMs: COOLDOWN.long },
+  { text: "model_not_found",             cooldownMs: COOLDOWN.long },
+  { text: "too many messages",           cooldownMs: COOLDOWN.long },
+  { text: "maximum is",                  cooldownMs: COOLDOWN.long },
+  { text: "rate limit",                  backoff: true },
+  { text: "too many requests",           backoff: true },
+  { text: "quota exceeded",              backoff: true },
+  { text: "capacity",                    backoff: true },
+  { text: "overloaded",                  backoff: true },
 
   // --- Status-based rules (fallback when text doesn't match) ---
+  { status: 400, cooldownMs: COOLDOWN.long },
   { status: 401, cooldownMs: COOLDOWN.long },
   { status: 402, cooldownMs: COOLDOWN.long },
   { status: 403, cooldownMs: COOLDOWN.long },
   { status: 404, cooldownMs: COOLDOWN.long },
+  { status: 406, cooldownMs: COOLDOWN.long },
+  { status: 408, cooldownMs: COOLDOWN.short },
+  { status: 410, cooldownMs: COOLDOWN.long },
   { status: 429, backoff: true },
+  { status: 500, cooldownMs: COOLDOWN.short },
+  { status: 502, cooldownMs: COOLDOWN.short },
+  { status: 503, cooldownMs: COOLDOWN.short },
+  { status: 504, cooldownMs: COOLDOWN.short },
 ];
 
 // Backward compat: COOLDOWN_MS object (used by index.js re-export)
@@ -82,4 +65,11 @@ export const COOLDOWN_MS = {
   notFound: COOLDOWN.long,
   transient: TRANSIENT_COOLDOWN_MS,
   requestNotAllowed: COOLDOWN.short,
+};
+
+// Exponential backoff config for rate limits
+export const BACKOFF_CONFIG = {
+  base: 2000,
+  max: 5 * 60 * 1000,
+  maxLevel: 15
 };
