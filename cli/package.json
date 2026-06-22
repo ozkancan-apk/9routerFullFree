@@ -1,6 +1,6 @@
 {
   "name": "fullfree9router",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "description": "fullfree9router CLI - Start and manage 9router (free fork)",
   "bin": {
     "fullfree9router": "./cli.js"
