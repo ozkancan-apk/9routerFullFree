@@ -1,0 +1,16 @@
+diff --git a/open-sse/executors/commandcode.js b/open-sse/executors/commandcode.js
+index aad404398..fac065c6b 100644
+--- a/open-sse/executors/commandcode.js
++++ b/open-sse/executors/commandcode.js
+@@ -21,7 +21,11 @@ export class CommandCodeExecutor extends BaseExecutor {
+   }
+ 
+   transformRequest(model, body, stream, credentials) {
++    if (!body.params) body.params = {};
++  
+     body.stream = true;
++    body.params.stream = true;
++  
+     return body;
+   }
+ 

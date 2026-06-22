@@ -1,0 +1,73 @@
+diff --git a/open-sse/executors/kiro.js b/open-sse/executors/kiro.js
+index 3034f725f..bc8df5165 100644
+--- a/open-sse/executors/kiro.js
++++ b/open-sse/executors/kiro.js
+@@ -1,8 +1,10 @@
+ import { BaseExecutor } from "./base.js";
+ import { PROVIDERS } from "../config/providers.js";
++import { resolveKiroModel } from "../config/kiroConstants.js";
+ import { v4 as uuidv4 } from "uuid";
+ import { refreshKiroToken } from "../services/tokenRefresh.js";
+ import { SSE_DONE, SSE_HEADERS } from "../utils/sseConstants.js";
++import { getCapabilitiesForModel } from "../providers/capabilities.js";
+ 
+ /**
+  * KiroExecutor - Executor for Kiro AI (AWS CodeWhisperer)
+@@ -101,6 +103,8 @@ export class KiroExecutor extends BaseExecutor {
+     let chunkIndex = 0;
+     const responseId = `chatcmpl-${Date.now()}`;
+     const created = Math.floor(Date.now() / 1000);
++    const capabilityModel = resolveKiroModel(model).upstream;
++    const contextWindow = getCapabilitiesForModel("kiro", capabilityModel).contextWindow || 200000;
+     const state = {
+       endDetected: false,
+       finishEmitted: false,
+@@ -357,9 +361,8 @@ export class KiroExecutor extends BaseExecutor {
+                 : 0;
+ 
+               // Estimate input tokens from contextUsagePercentage
+-              // Kiro models typically have 200k context window
+               const estimatedInputTokens = state.contextUsagePercentage > 0
+-                ? Math.floor(state.contextUsagePercentage * 200000 / 100)
++                ? Math.floor(state.contextUsagePercentage * contextWindow / 100)
+                 : 0;
+ 
+               state.usage = {
+diff --git a/open-sse/providers/capabilities.js b/open-sse/providers/capabilities.js
+index 2cc610365..bc5a69f33 100644
+--- a/open-sse/providers/capabilities.js
++++ b/open-sse/providers/capabilities.js
+@@ -71,10 +71,14 @@ export function capabilitiesFromServiceKind(kind) {
+  * otherwise mis-match. Only declare deltas vs DEFAULT.
+  */
+ export const MODEL_CAPABILITIES = {
+-  // Claude 4.6/4.7 have 1M context + adaptive thinking (override generic claude pattern)
++  // Claude 4.6/4.7/4.8 have 1M context + adaptive thinking (override generic claude pattern)
+   "claude-opus-4.6":   { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
+   "claude-opus-4.7":   { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
++  "claude-opus-4.8":   { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
+   "claude-opus-4-6":   { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
++  "claude-opus-4-8":   { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
++  "claude-opus-4.8-thinking": { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
++  "claude-opus-4-8-thinking": { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 128000 },
+   "claude-sonnet-4.6": { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 64000 },
+   "claude-sonnet-4-6": { vision: true, reasoning: true, search: true, thinkingFormat: "claude-adaptive", contextWindow: 1000000, maxOutput: 64000 },
+ 
+diff --git a/tests/unit/capabilities.test.js b/tests/unit/capabilities.test.js
+new file mode 100644
+index 000000000..3839809b3
+--- /dev/null
++++ b/tests/unit/capabilities.test.js
+@@ -0,0 +1,12 @@
++import { describe, expect, it } from "vitest";
++import { getCapabilitiesForModel } from "../../open-sse/providers/capabilities.js";
++
++describe("getCapabilitiesForModel", () => {
++  it("reports Kiro Claude Opus 4.8 as a 1M context model", () => {
++    expect(getCapabilitiesForModel("kiro", "claude-opus-4.8").contextWindow).toBe(1000000);
++    expect(getCapabilitiesForModel("kiro", "anthropic/claude-opus-4.8").contextWindow).toBe(1000000);
++    expect(getCapabilitiesForModel("kiro", "claude-opus-4-8").contextWindow).toBe(1000000);
++    expect(getCapabilitiesForModel("kiro", "claude-opus-4.8-thinking").contextWindow).toBe(1000000);
++    expect(getCapabilitiesForModel("kiro", "claude-opus-4-8-thinking").contextWindow).toBe(1000000);
++  });
++});

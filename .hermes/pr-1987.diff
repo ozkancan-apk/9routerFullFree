@@ -1,0 +1,26 @@
+diff --git a/src/app/api/v1/audio/voices/route.js b/src/app/api/v1/audio/voices/route.js
+index 69d37bd9f5..40bc162a1f 100644
+--- a/src/app/api/v1/audio/voices/route.js
++++ b/src/app/api/v1/audio/voices/route.js
+@@ -5,6 +5,8 @@ const PROVIDER_API = {
+   elevenlabs: (origin) => `${origin}/api/media-providers/tts/elevenlabs/voices`,
+   deepgram: (origin) => `${origin}/api/media-providers/tts/deepgram/voices`,
+   inworld: (origin) => `${origin}/api/media-providers/tts/inworld/voices`,
++  minimax: (origin) => `${origin}/api/media-providers/tts/minimax/voices`,
++  "minimax-cn": (origin) => `${origin}/api/media-providers/tts/minimax/voices?provider=minimax-cn`,
+   "edge-tts": (origin) => `${origin}/api/media-providers/tts/voices?provider=edge-tts`,
+   "local-device": (origin) => `${origin}/api/media-providers/tts/voices?provider=local-device`,
+ };
+diff --git a/src/app/api/v1/models/info/route.js b/src/app/api/v1/models/info/route.js
+index 551c12221d..da2262f7bc 100644
+--- a/src/app/api/v1/models/info/route.js
++++ b/src/app/api/v1/models/info/route.js
+@@ -13,7 +13,7 @@ const KIND_ENDPOINT = {
+   webFetch: "/v1/fetch",
+ };
+ 
+-const TTS_VOICES_API = new Set(["elevenlabs", "edge-tts", "deepgram", "inworld", "local-device"]);
++const TTS_VOICES_API = new Set(["elevenlabs", "edge-tts", "deepgram", "inworld", "local-device", "minimax", "minimax-cn"]);
+ 
+ function buildInfo({ alias, providerId, model, kind, providerInfo }) {
+   const out = {

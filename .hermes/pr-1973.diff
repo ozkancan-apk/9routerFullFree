@@ -1,0 +1,272 @@
+diff --git a/open-sse/handlers/chatCore.js b/open-sse/handlers/chatCore.js
+index d93eb65284..9f6de8ba80 100644
+--- a/open-sse/handlers/chatCore.js
++++ b/open-sse/handlers/chatCore.js
+@@ -162,9 +162,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
+   if (rtkLine) console.log(rtkLine);
+ 
+   // Headroom: optional external proxy compression; fail open if proxy is absent.
+-  const headroomStats = await compressWithHeadroom(translatedBody, { enabled: headroomEnabled, url: headroomUrl, model: upstreamModel, format: finalFormat, compressUserMessages: headroomCompressUserMessages });
++  const headroomDiagnostics = {};
++  const headroomStats = await compressWithHeadroom(translatedBody, { enabled: headroomEnabled, url: headroomUrl, model: upstreamModel, format: finalFormat, compressUserMessages: headroomCompressUserMessages, diagnostics: headroomDiagnostics });
+   const headroomLine = formatHeadroomLog(headroomStats);
+   if (headroomLine) log?.info?.("HEADROOM", headroomLine);
++  else if (headroomEnabled) log?.warn?.("HEADROOM", `skipped: ${headroomDiagnostics.reason || "compression unavailable"}${headroomDiagnostics.endpoint ? ` (${headroomDiagnostics.endpoint})` : ""}`);
+ 
+   // Caveman: inject terse-style system prompt
+   if (cavemanEnabled && cavemanLevel) {
+diff --git a/open-sse/rtk/headroom.js b/open-sse/rtk/headroom.js
+index ac2f4db58b..9ceadc420e 100644
+--- a/open-sse/rtk/headroom.js
++++ b/open-sse/rtk/headroom.js
+@@ -3,35 +3,73 @@ import { openaiToClaudeRequest } from "../translator/request/openai-to-claude.js
+ 
+ const DEFAULT_TIMEOUT_MS = 3000;
+ 
++function setDiagnostic(diagnostics, reason) {
++  if (diagnostics && !diagnostics.reason) diagnostics.reason = reason;
++}
++
++function describeFetchError(error) {
++  const cause = error?.cause;
++  const code = cause?.code || error?.code;
++  const message = cause?.message || error?.message || String(error);
++  return code ? `${code}: ${message}` : message;
++}
++
+ // POST messages to Headroom /v1/compress; returns compressed messages + stats or null.
+-async function callCompress(url, messages, model, timeoutMs, compressUserMessages) {
++async function callCompress(url, messages, model, timeoutMs, compressUserMessages, diagnostics) {
+   const endpoint = `${String(url).replace(/\/$/, "")}/v1/compress`;
++  diagnostics.endpoint = endpoint;
+   const payload = { messages, model };
+   if (compressUserMessages) payload.config = { compress_user_messages: true };
+-  const res = await fetch(endpoint, {
+-    method: "POST",
+-    headers: { "Content-Type": "application/json" },
+-    body: JSON.stringify(payload),
+-    signal: AbortSignal.timeout(timeoutMs),
+-  });
+-  if (!res.ok) return null;
++  let res;
++  try {
++    res = await fetch(endpoint, {
++      method: "POST",
++      headers: { "Content-Type": "application/json" },
++      body: JSON.stringify(payload),
++      signal: AbortSignal.timeout(timeoutMs),
++    });
++  } catch (error) {
++    setDiagnostic(diagnostics, `request failed: ${describeFetchError(error)}`);
++    return null;
++  }
++  if (!res.ok) {
++    setDiagnostic(diagnostics, `proxy returned HTTP ${res.status}`);
++    return null;
++  }
+   const data = await res.json();
+-  if (!Array.isArray(data?.messages)) return null;
++  if (!Array.isArray(data?.messages)) {
++    setDiagnostic(diagnostics, "proxy response missing messages[]");
++    return null;
++  }
+   return data;
+ }
+ 
+ // Compress request body via Headroom proxy. Fail-open: returns null on any error.
+ // /v1/compress only understands OpenAI shape, so Claude bodies are translated
+ // to OpenAI, compressed, then translated back using 9Router's own translators.
+-export async function compressWithHeadroom(body, { enabled, url, model, format, compressUserMessages, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+-  if (!enabled || !url || !body) return null;
++export async function compressWithHeadroom(body, { enabled, url, model, format, compressUserMessages, timeoutMs = DEFAULT_TIMEOUT_MS, diagnostics = null } = {}) {
++  if (!enabled) {
++    setDiagnostic(diagnostics, "disabled");
++    return null;
++  }
++  if (!url) {
++    setDiagnostic(diagnostics, "missing proxy URL");
++    return null;
++  }
++  if (!body) {
++    setDiagnostic(diagnostics, "missing request body");
++    return null;
++  }
+ 
+   try {
+     // Claude shape: translate → OpenAI → compress → translate back.
+     if (format === "claude") {
+       const oai = claudeToOpenAIRequest(model, body, false);
+-      if (!Array.isArray(oai?.messages)) return null;
+-      const data = await callCompress(url, oai.messages, model, timeoutMs, compressUserMessages);
++      if (!Array.isArray(oai?.messages)) {
++        setDiagnostic(diagnostics, "Claude request did not translate to messages[]");
++        return null;
++      }
++      const data = await callCompress(url, oai.messages, model, timeoutMs, compressUserMessages, diagnostics || {});
+       if (!data) return null;
+       const claudeBody = openaiToClaudeRequest(model, { ...oai, messages: data.messages }, false);
+       if (Array.isArray(claudeBody?.messages)) body.messages = claudeBody.messages;
+@@ -43,12 +81,16 @@ export async function compressWithHeadroom(body, { enabled, url, model, format,
+     const key = Array.isArray(body.messages) ? "messages"
+       : Array.isArray(body.input) ? "input"
+       : null;
+-    if (!key) return null;
+-    const data = await callCompress(url, body[key], model, timeoutMs, compressUserMessages);
++    if (!key) {
++      setDiagnostic(diagnostics, `unsupported ${format || "unknown"} request shape`);
++      return null;
++    }
++    const data = await callCompress(url, body[key], model, timeoutMs, compressUserMessages, diagnostics || {});
+     if (!data) return null;
+     body[key] = data.messages;
+     return data;
+-  } catch {
++  } catch (error) {
++    setDiagnostic(diagnostics, `unexpected error: ${error?.message || String(error)}`);
+     return null;
+   }
+ }
+diff --git a/tests/unit/headroom-chat-core.test.js b/tests/unit/headroom-chat-core.test.js
+new file mode 100644
+index 0000000000..caef6b5018
+--- /dev/null
++++ b/tests/unit/headroom-chat-core.test.js
+@@ -0,0 +1,93 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++
++const { executeMock } = vi.hoisted(() => ({
++  executeMock: vi.fn(),
++}));
++
++vi.mock("../../open-sse/executors/index.js", () => ({
++  getExecutor: () => ({
++    noAuth: true,
++    execute: executeMock,
++  }),
++}));
++
++vi.mock("../../open-sse/utils/requestLogger.js", () => ({
++  createRequestLogger: async () => ({
++    logClientRawRequest: vi.fn(),
++    logRawRequest: vi.fn(),
++    logTargetRequest: vi.fn(),
++    logProviderResponse: vi.fn(),
++    logConvertedResponse: vi.fn(),
++    logError: vi.fn(),
++  }),
++}));
++
++vi.mock("../../open-sse/utils/stream.js", () => ({
++  COLORS: { red: "", reset: "" },
++}));
++
++vi.mock("@/lib/usageDb.js", () => ({
++  trackPendingRequest: vi.fn(),
++  appendRequestLog: vi.fn(async () => {}),
++  saveRequestDetail: vi.fn(async () => {}),
++}));
++
++const { handleChatCore } = await import("../../open-sse/handlers/chatCore.js");
++
++describe("handleChatCore Headroom diagnostics", () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    global.fetch = vi.fn(async (url) => {
++      if (String(url).includes("/v1/compress")) {
++        throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:8787"), { code: "ECONNREFUSED" });
++      }
++      throw new Error(`unexpected fetch: ${url}`);
++    });
++    executeMock.mockResolvedValue({
++      response: new Response(JSON.stringify({
++        id: "chatcmpl-test",
++        object: "chat.completion",
++        choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop", index: 0 }],
++      }), { status: 200, headers: { "content-type": "application/json" } }),
++      url: "https://api.openai.com/v1/chat/completions",
++      headers: {},
++      transformedBody: null,
++    });
++  });
++
++  it("logs why Headroom was skipped on chat completions", async () => {
++    const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn() };
++
++    await handleChatCore({
++      body: { model: "gpt-4o", stream: false, messages: [{ role: "user", content: "hello" }] },
++      modelInfo: { provider: "openai", model: "gpt-4o" },
++      credentials: { apiKey: "test-key", providerSpecificData: {} },
++      log,
++      connectionId: "test-conn",
++      headroomEnabled: true,
++      headroomUrl: "http://localhost:8787",
++      headroomCompressUserMessages: false,
++      rtkEnabled: false,
++      cavemanEnabled: false,
++      ponytailEnabled: false,
++      clientRawRequest: {
++        endpoint: "/v1/chat/completions",
++        body: {},
++        headers: { accept: "application/json" },
++      },
++    });
++
++    expect(log.warn).toHaveBeenCalledWith(
++      "HEADROOM",
++      expect.stringContaining("skipped: request failed")
++    );
++    expect(log.warn).toHaveBeenCalledWith(
++      "HEADROOM",
++      expect.stringContaining("ECONNREFUSED")
++    );
++    expect(log.warn).toHaveBeenCalledWith(
++      "HEADROOM",
++      expect.stringContaining("http://localhost:8787/v1/compress")
++    );
++  });
++});
+diff --git a/tests/unit/headroom.test.js b/tests/unit/headroom.test.js
+index f4e4baca32..731d118e4d 100644
+--- a/tests/unit/headroom.test.js
++++ b/tests/unit/headroom.test.js
+@@ -47,21 +47,38 @@ describe("compressWithHeadroom", () => {
+   it("fails open on bad response", async () => {
+     global.fetch = vi.fn(async () => new Response(JSON.stringify({ error: "bad" }), { status: 500 }));
+     const body = { messages: [{ role: "user", content: "long" }] };
++    const diagnostics = {};
+ 
+-    const stats = await compressWithHeadroom(body, { enabled: true, url: "http://localhost:8787" });
++    const stats = await compressWithHeadroom(body, { enabled: true, url: "http://localhost:8787", diagnostics });
+ 
+     expect(stats).toBeNull();
+     expect(body.messages[0].content).toBe("long");
++    expect(diagnostics.reason).toBe("proxy returned HTTP 500");
++  });
++
++  it("records request failures for diagnostics", async () => {
++    global.fetch = vi.fn(async () => { throw Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:8787"), { code: "ECONNREFUSED" }); });
++    const body = { messages: [{ role: "user", content: "long" }] };
++    const diagnostics = {};
++
++    const stats = await compressWithHeadroom(body, { enabled: true, url: "http://localhost:8787", diagnostics });
++
++    expect(stats).toBeNull();
++    expect(diagnostics.endpoint).toBe("http://localhost:8787/v1/compress");
++    expect(diagnostics.reason).toContain("request failed");
++    expect(diagnostics.reason).toContain("ECONNREFUSED");
+   });
+ 
+   it("skips unknown shapes", async () => {
+     global.fetch = vi.fn();
+     const body = { contents: [{ parts: [{ text: "long" }] }] };
++    const diagnostics = {};
+ 
+-    const stats = await compressWithHeadroom(body, { enabled: true, url: "http://localhost:8787" });
++    const stats = await compressWithHeadroom(body, { enabled: true, url: "http://localhost:8787", format: "gemini", diagnostics });
+ 
+     expect(stats).toBeNull();
+     expect(global.fetch).not.toHaveBeenCalled();
++    expect(diagnostics.reason).toBe("unsupported gemini request shape");
+   });
+ });
+ 

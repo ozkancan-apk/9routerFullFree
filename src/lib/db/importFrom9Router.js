@@ -142,7 +142,24 @@ function doImport(origDb, adapter) {
         } catch {}
       }
 
-      console.log(`[DB][migrate] Imported ${connCount} connections, ${keyCount} API keys from original 9router`);
+      // Import combos
+      let comboCount = 0;
+      if (tableNames.has("combos")) {
+        try {
+          const combos = qAll("SELECT * FROM combos");
+          for (const row of combos) {
+            adapter.run(
+              `INSERT OR REPLACE INTO combos(id, name, kind, models, createdAt, updatedAt, dimensions) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+              [row.id, row.name, row.kind || null, row.models || "[]", row.createdAt || new Date().toISOString(), row.updatedAt || new Date().toISOString(), row.dimensions || null]
+            );
+            comboCount++;
+          }
+        } catch (e) {
+          console.warn(`[DB][migrate] combos error: ${e.message}`);
+        }
+      }
+
+      console.log(`[DB][migrate] Imported ${connCount} connections, ${keyCount} API keys, ${comboCount} combos from original 9router`);
     });
 
     return true;

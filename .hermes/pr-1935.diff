@@ -1,0 +1,68 @@
+diff --git a/open-sse/executors/opencode-go.js b/open-sse/executors/opencode-go.js
+index 7bf47edb7b..44418cc902 100644
+--- a/open-sse/executors/opencode-go.js
++++ b/open-sse/executors/opencode-go.js
+@@ -2,6 +2,7 @@ import { BaseExecutor } from "./base.js";
+ import { PROVIDERS } from "../config/providers.js";
+ import { injectReasoningContent } from "../utils/reasoningContentInjector.js";
+ import { ANTHROPIC_API_VERSION } from "../providers/shared.js";
++import { stripUnsupportedParams } from "../translator/concerns/paramSupport.js";
+ 
+ // Models that use /zen/go/v1/messages (Anthropic/Claude format + x-api-key auth)
+ const MESSAGES_FORMAT_MODELS = new Set([
+@@ -44,6 +45,7 @@ export class OpenCodeGoExecutor extends BaseExecutor {
+   }
+ 
+   transformRequest(model, body) {
++    stripUnsupportedParams(this.provider, model, body);
+     return injectReasoningContent({ provider: this.provider, model, body });
+   }
+ }
+diff --git a/open-sse/translator/concerns/paramSupport.js b/open-sse/translator/concerns/paramSupport.js
+index 3b8fc9a9e0..f9cc0c622b 100644
+--- a/open-sse/translator/concerns/paramSupport.js
++++ b/open-sse/translator/concerns/paramSupport.js
+@@ -8,6 +8,8 @@ const STRIP_RULES = [
+   { match: /claude-opus-4/i, drop: ["temperature"] },
+   // GitHub Copilot gpt-5.4: temperature unsupported.
+   { provider: "github", match: /gpt-5\.4/i, drop: ["temperature"] },
++  // OpenCode Go Kimi K2.7 Code rejects explicit temperature values.
++  { provider: "opencode-go", match: /^kimi-k2\.7-code$/i, drop: ["temperature"] },
+   // GitHub Copilot Claude (except opus/sonnet 4.6): thinking + reasoning_effort rejected. #713
+   { provider: "github", match: (m) => /claude/i.test(m) && !/claude.*(opus|sonnet).*4\.6/i.test(m), drop: ["thinking", "reasoning_effort"] },
+ ];
+diff --git a/tests/unit/opencode-go-models.test.js b/tests/unit/opencode-go-models.test.js
+index 10946ab1da..a97b833e64 100644
+--- a/tests/unit/opencode-go-models.test.js
++++ b/tests/unit/opencode-go-models.test.js
+@@ -69,3 +69,30 @@ describe("OpenCode Go endpoint routing", () => {
+     }
+   });
+ });
++
++describe("OpenCode Go request parameters", () => {
++  it("strips temperature for Kimi K2.7 Code because Moonshot only accepts its default", () => {
++    const executor = new OpenCodeGoExecutor();
++
++    const body = executor.transformRequest("kimi-k2.7-code", {
++      messages: [{ role: "user", content: "hello" }],
++      max_tokens: 8,
++      temperature: 0.7,
++    });
++
++    expect(body.temperature).toBeUndefined();
++    expect(body.max_tokens).toBe(8);
++  });
++
++  it("preserves temperature for other OpenCode Go chat models", () => {
++    const executor = new OpenCodeGoExecutor();
++
++    const body = executor.transformRequest("glm-5.2", {
++      messages: [{ role: "user", content: "hello" }],
++      max_tokens: 8,
++      temperature: 0.7,
++    });
++
++    expect(body.temperature).toBe(0.7);
++  });
++});

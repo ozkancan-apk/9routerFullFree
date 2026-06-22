@@ -1,0 +1,281 @@
+diff --git a/open-sse/handlers/chatCore/nonStreamingHandler.js b/open-sse/handlers/chatCore/nonStreamingHandler.js
+index 000406580a..ff563be4ae 100644
+--- a/open-sse/handlers/chatCore/nonStreamingHandler.js
++++ b/open-sse/handlers/chatCore/nonStreamingHandler.js
+@@ -166,7 +166,7 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
+   // Decloak tool_use names once on raw Claude body, before any translation (INPUT side)
+   responseBody = decloakToolNames(responseBody, toolNameMap);
+ 
+-  const usage = extractUsageFromResponse(responseBody);
++  const usage = extractUsageFromResponse(responseBody, { targetFormat, provider, requestBody: body });
+   appendLog({ tokens: usage, status: "200 OK" });
+   saveUsageStats({ provider, model, tokens: usage, connectionId, apiKey, endpoint: clientRawRequest?.endpoint });
+ 
+diff --git a/open-sse/handlers/chatCore/requestDetail.js b/open-sse/handlers/chatCore/requestDetail.js
+index d9dde1a36e..06a6a56990 100644
+--- a/open-sse/handlers/chatCore/requestDetail.js
++++ b/open-sse/handlers/chatCore/requestDetail.js
+@@ -1,5 +1,8 @@
+ import { saveRequestUsage, appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
++import { FORMATS } from "../../translator/formats.js";
++import { toOpenAIUsage } from "../../translator/concerns/usage.js";
+ import { COLORS } from "../../utils/stream.js";
++import { estimateInputTokens } from "../../utils/usageTracking.js";
+ 
+ const OPTIONAL_PARAMS = [
+   "temperature", "top_p", "top_k",
+@@ -20,36 +23,134 @@ export function extractRequestConfig(body, stream) {
+   return config;
+ }
+ 
+-export function extractUsageFromResponse(responseBody) {
++function completeEstimatedPromptTokens(usage, requestBody) {
++  if (!usage || typeof usage !== "object") return usage;
++
++  const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? 0;
++  const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? 0;
++  if (promptTokens !== 0 || completionTokens === 0 || !requestBody) return usage;
++
++  const estimatedPromptTokens = estimateInputTokens(requestBody);
++  if (estimatedPromptTokens <= 0) return usage;
++
++  return {
++    ...usage,
++    prompt_tokens: estimatedPromptTokens,
++    total_tokens: estimatedPromptTokens + completionTokens,
++    estimated: true
++  };
++}
++
++function hasUsableTokenData(usage) {
++  if (!usage || typeof usage !== "object") return false;
++
++  const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? 0;
++  const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? 0;
++  const totalTokens = usage.total_tokens ?? 0;
++
++  return promptTokens > 0 || completionTokens > 0 || totalTokens > 0;
++}
++
++function extractOpenAIResponsesUsage(usage) {
++  if (!usage || typeof usage !== "object") return null;
++
++  if (usage.input_tokens !== undefined || usage.output_tokens !== undefined) {
++    return {
++      prompt_tokens: usage.input_tokens || 0,
++      completion_tokens: usage.output_tokens || 0,
++      total_tokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
++      cached_tokens: usage.input_tokens_details?.cached_tokens,
++      reasoning_tokens: usage.output_tokens_details?.reasoning_tokens,
++      prompt_tokens_details: usage.input_tokens_details?.cached_tokens
++        ? { cached_tokens: usage.input_tokens_details.cached_tokens }
++        : undefined,
++      completion_tokens_details: usage.output_tokens_details
++    };
++  }
++
++  if (usage.prompt_tokens !== undefined) {
++    return {
++      prompt_tokens: usage.prompt_tokens || 0,
++      completion_tokens: usage.completion_tokens || 0,
++      total_tokens: usage.total_tokens,
++      cached_tokens: usage.prompt_tokens_details?.cached_tokens,
++      reasoning_tokens: usage.completion_tokens_details?.reasoning_tokens,
++      prompt_tokens_details: usage.prompt_tokens_details,
++      completion_tokens_details: usage.completion_tokens_details
++    };
++  }
++
++  return null;
++}
++
++function extractGeminiUsage(usageMetadata) {
++  if (!usageMetadata || typeof usageMetadata !== "object") return null;
++
++  return {
++    prompt_tokens: usageMetadata.promptTokenCount || 0,
++    completion_tokens: usageMetadata.candidatesTokenCount || 0,
++    total_tokens: usageMetadata.totalTokenCount,
++    cached_tokens: usageMetadata.cachedContentTokenCount,
++    reasoning_tokens: usageMetadata.thoughtsTokenCount
++  };
++}
++
++function providerUsageKind(targetFormat, provider) {
++  const providerName = String(provider || "").toLowerCase();
++
++  if (targetFormat === FORMATS.OLLAMA || providerName === "ollama" || providerName === "ollama-local") return "ollama";
++  if (targetFormat === FORMATS.KIRO || providerName === "kiro") return "kiro";
++  if (targetFormat === FORMATS.COMMANDCODE || providerName === "commandcode") return "commandcode";
++  if (targetFormat === FORMATS.GEMINI || targetFormat === FORMATS.GEMINI_CLI || targetFormat === FORMATS.ANTIGRAVITY || targetFormat === FORMATS.VERTEX) return "gemini";
++  if (targetFormat === FORMATS.CLAUDE || providerName === "claude") return "claude";
++
++  return null;
++}
++
++export function extractUsageFromResponse(responseBody, { targetFormat, provider, requestBody } = {}) {
+   if (!responseBody || typeof responseBody !== "object") return null;
+ 
+   // Claude format
+   if (responseBody.usage?.input_tokens !== undefined) {
+-    return {
++    return completeEstimatedPromptTokens({
+       prompt_tokens: responseBody.usage.input_tokens || 0,
+       completion_tokens: responseBody.usage.output_tokens || 0,
++      total_tokens: (responseBody.usage.input_tokens || 0) + (responseBody.usage.output_tokens || 0),
+       cache_read_input_tokens: responseBody.usage.cache_read_input_tokens,
+       cache_creation_input_tokens: responseBody.usage.cache_creation_input_tokens
+-    };
++    }, requestBody);
+   }
+ 
+   // OpenAI format
+   if (responseBody.usage?.prompt_tokens !== undefined) {
+-    return {
++    return completeEstimatedPromptTokens({
+       prompt_tokens: responseBody.usage.prompt_tokens || 0,
+       completion_tokens: responseBody.usage.completion_tokens || 0,
++      total_tokens: responseBody.usage.total_tokens,
+       cached_tokens: responseBody.usage.prompt_tokens_details?.cached_tokens,
+-      reasoning_tokens: responseBody.usage.completion_tokens_details?.reasoning_tokens
+-    };
++      reasoning_tokens: responseBody.usage.completion_tokens_details?.reasoning_tokens,
++      prompt_tokens_details: responseBody.usage.prompt_tokens_details,
++      completion_tokens_details: responseBody.usage.completion_tokens_details
++    }, requestBody);
++  }
++
++  // OpenAI Responses API format nested under response
++  const responseUsage = extractOpenAIResponsesUsage(responseBody.response?.usage);
++  if (responseUsage) {
++    return completeEstimatedPromptTokens(responseUsage, requestBody);
+   }
+ 
+   // Gemini format
+-  if (responseBody.usageMetadata) {
+-    return {
+-      prompt_tokens: responseBody.usageMetadata.promptTokenCount || 0,
+-      completion_tokens: responseBody.usageMetadata.candidatesTokenCount || 0,
+-      reasoning_tokens: responseBody.usageMetadata.thoughtsTokenCount
+-    };
++  const geminiUsage = extractGeminiUsage(responseBody.usageMetadata || responseBody.response?.usageMetadata);
++  if (geminiUsage) {
++    return completeEstimatedPromptTokens(geminiUsage, requestBody);
++  }
++
++  const usageKind = providerUsageKind(targetFormat, provider);
++  if (usageKind) {
++    const mappedUsage = toOpenAIUsage(responseBody, usageKind);
++    const completedUsage = completeEstimatedPromptTokens(mappedUsage, requestBody);
++    return hasUsableTokenData(completedUsage) ? completedUsage : null;
+   }
+ 
+   return null;
+@@ -87,7 +188,15 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey,
+   // Normalize to OpenAI token shape for storage
+   const normalized = {
+     prompt_tokens: tokens.prompt_tokens ?? tokens.input_tokens ?? 0,
+-    completion_tokens: tokens.completion_tokens ?? tokens.output_tokens ?? 0
++    completion_tokens: tokens.completion_tokens ?? tokens.output_tokens ?? 0,
++    total_tokens: tokens.total_tokens,
++    cache_read_input_tokens: tokens.cache_read_input_tokens,
++    cache_creation_input_tokens: tokens.cache_creation_input_tokens,
++    cached_tokens: tokens.cached_tokens ?? tokens.prompt_tokens_details?.cached_tokens,
++    reasoning_tokens: tokens.reasoning_tokens ?? tokens.completion_tokens_details?.reasoning_tokens,
++    prompt_tokens_details: tokens.prompt_tokens_details,
++    completion_tokens_details: tokens.completion_tokens_details,
++    estimated: tokens.estimated
+   };
+ 
+   saveRequestUsage({
+diff --git a/tests/unit/nonstream-usage-extraction.test.js b/tests/unit/nonstream-usage-extraction.test.js
+new file mode 100644
+index 0000000000..c220b84fd4
+--- /dev/null
++++ b/tests/unit/nonstream-usage-extraction.test.js
+@@ -0,0 +1,85 @@
++import { describe, expect, it } from "vitest";
++import { extractUsageFromResponse } from "../../open-sse/handlers/chatCore/requestDetail.js";
++import { FORMATS } from "../../open-sse/translator/formats.js";
++
++describe("extractUsageFromResponse", () => {
++  it("extracts raw Ollama usage from non-streaming responses", () => {
++    const usage = extractUsageFromResponse(
++      { done: true, prompt_eval_count: 18, eval_count: 3 },
++      { targetFormat: FORMATS.OLLAMA, requestBody: { messages: [{ role: "user", content: "hello" }] } }
++    );
++
++    expect(usage).toMatchObject({
++      prompt_tokens: 18,
++      completion_tokens: 3,
++      total_tokens: 21
++    });
++    expect(usage.estimated).toBeUndefined();
++  });
++
++  it("estimates missing Ollama prompt tokens when output tokens are present", () => {
++    const usage = extractUsageFromResponse(
++      { done: true, eval_count: 1 },
++      { targetFormat: FORMATS.OLLAMA, requestBody: { messages: [{ role: "user", content: "hello world" }] } }
++    );
++
++    expect(usage.prompt_tokens).toBeGreaterThan(0);
++    expect(usage.completion_tokens).toBe(1);
++    expect(usage.total_tokens).toBe(usage.prompt_tokens + usage.completion_tokens);
++    expect(usage.estimated).toBe(true);
++  });
++
++  it("extracts nested OpenAI Responses API usage", () => {
++    const usage = extractUsageFromResponse({
++      response: {
++        usage: {
++          input_tokens: 10,
++          output_tokens: 4,
++          input_tokens_details: { cached_tokens: 2 },
++          output_tokens_details: { reasoning_tokens: 1 }
++        }
++      }
++    });
++
++    expect(usage).toMatchObject({
++      prompt_tokens: 10,
++      completion_tokens: 4,
++      cached_tokens: 2,
++      reasoning_tokens: 1
++    });
++  });
++
++  it("extracts nested Gemini usage metadata", () => {
++    const usage = extractUsageFromResponse({
++      response: {
++        usageMetadata: {
++          promptTokenCount: 5,
++          candidatesTokenCount: 2,
++          thoughtsTokenCount: 1,
++          totalTokenCount: 8
++        }
++      }
++    });
++
++    expect(usage).toMatchObject({
++      prompt_tokens: 5,
++      completion_tokens: 2,
++      reasoning_tokens: 1,
++      total_tokens: 8
++    });
++  });
++
++  it("extracts Kiro and CommandCode raw non-stream usage fields", () => {
++    expect(extractUsageFromResponse({ inputTokens: 12, outputTokens: 3 }, { targetFormat: FORMATS.KIRO })).toMatchObject({
++      prompt_tokens: 12,
++      completion_tokens: 3,
++      total_tokens: 15
++    });
++
++    expect(extractUsageFromResponse({ inputTokens: 8, outputTokens: 2, totalTokens: 20 }, { targetFormat: FORMATS.COMMANDCODE })).toMatchObject({
++      prompt_tokens: 8,
++      completion_tokens: 2,
++      total_tokens: 20
++    });
++  });
++});

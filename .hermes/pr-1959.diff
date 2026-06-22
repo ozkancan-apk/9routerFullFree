@@ -1,0 +1,83 @@
+diff --git a/open-sse/config/appConstants.js b/open-sse/config/appConstants.js
+index 6ac9d32442..be7c1dd531 100644
+--- a/open-sse/config/appConstants.js
++++ b/open-sse/config/appConstants.js
+@@ -127,9 +127,22 @@ export const AG_DEFAULT_TOOLS = new Set([
+   "write_to_file"
+ ]);
+ 
++// Antigravity version fingerprint — match real Antigravity/Electron client headers
++export const ANTIGRAVITY_VERSION = "4.2.5";
++const ANTIGRAVITY_CHROME = "132.0.6834.160";
++const ANTIGRAVITY_ELECTRON = "39.2.3";
++
++function antigravityPlatformInfo() {
++  switch (platform()) {
++    case "darwin": return "Macintosh; Intel Mac OS X 10_15_7";
++    case "win32": return "Windows NT 10.0; Win64; x64";
++    default: return "X11; Linux x86_64";
++  }
++}
++
+ // Antigravity chat/stream headers
+ export const ANTIGRAVITY_HEADERS = {
+-  "User-Agent": `antigravity/1.107.0 ${platform()}/${arch()}`
++  "User-Agent": `Antigravity/${ANTIGRAVITY_VERSION} (${antigravityPlatformInfo()}) Chrome/${ANTIGRAVITY_CHROME} Electron/${ANTIGRAVITY_ELECTRON}`
+ };
+ 
+ // Cloud Code Assist API
+diff --git a/open-sse/executors/antigravity.js b/open-sse/executors/antigravity.js
+index d2d9552ae5..226c6b6739 100644
+--- a/open-sse/executors/antigravity.js
++++ b/open-sse/executors/antigravity.js
+@@ -1,7 +1,7 @@
+ import crypto from "crypto";
+ import { BaseExecutor } from "./base.js";
+ import { PROVIDERS } from "../config/providers.js";
+-import { OAUTH_ENDPOINTS, ANTIGRAVITY_HEADERS, INTERNAL_REQUEST_HEADER, AG_DEFAULT_TOOLS, AG_TOOL_SUFFIX } from "../config/appConstants.js";
++import { OAUTH_ENDPOINTS, ANTIGRAVITY_HEADERS, ANTIGRAVITY_VERSION, INTERNAL_REQUEST_HEADER, AG_DEFAULT_TOOLS, AG_TOOL_SUFFIX } from "../config/appConstants.js";
+ import { HTTP_STATUS } from "../config/runtimeConfig.js";
+ import { resolveSessionId } from "../utils/sessionManager.js";
+ import { proxyAwareFetch } from "../utils/proxyFetch.js";
+@@ -18,6 +18,9 @@ function sanitizeFunctionName(name) {
+ const MAX_RETRY_AFTER_MS = 10000;
+ const MAX_ANTIGRAVITY_OUTPUT_TOKENS = 16384;
+ 
++// Stable per-process session ID (matches AG Manager's SESSION_ID = one UUID per app launch)
++const ANTIGRAVITY_SESSION_ID = crypto.randomUUID();
++
+ // Fields Google generateContent rejects (Claude/OpenAI/Qwen thinking fields set at body root by thinkingUnified.js)
+ const ANTIGRAVITY_REQUEST_BLACKLIST = [
+   "output_config",
+@@ -91,6 +94,10 @@ export class AntigravityExecutor extends BaseExecutor {
+       "Authorization": `Bearer ${credentials.accessToken}`,
+       "User-Agent": this.config.headers?.["User-Agent"] || ANTIGRAVITY_HEADERS["User-Agent"],
+       [INTERNAL_REQUEST_HEADER.name]: INTERNAL_REQUEST_HEADER.value,
++      // Identity headers matching real Antigravity client fingerprint
++      "x-client-name": "antigravity",
++      "x-client-version": ANTIGRAVITY_VERSION,
++      "x-vscode-sessionid": ANTIGRAVITY_SESSION_ID,
+       ...(sid && { "X-Machine-Session-Id": sid }),
+       "Accept": stream ? "text/event-stream" : "application/json"
+     };
+diff --git a/open-sse/providers/registry/antigravity.js b/open-sse/providers/registry/antigravity.js
+index 4258f4550f..27902523e4 100644
+--- a/open-sse/providers/registry/antigravity.js
++++ b/open-sse/providers/registry/antigravity.js
+@@ -21,13 +21,12 @@ export default {
+   serviceKinds: ["llm", "image"],
+   transport: {
+     baseUrls: [
+-      "https://daily-cloudcode-pa.googleapis.com",
+       "https://daily-cloudcode-pa.sandbox.googleapis.com",
++      "https://daily-cloudcode-pa.googleapis.com",
++      "https://cloudcode-pa.googleapis.com",
+     ],
+     format: "antigravity",
+-    headers: {
+-      "User-Agent": "antigravity/1.107.0 darwin/arm64",
+-    },
++    headers: {},
+     retry: {
+       "429": {
+         attempts: 3,
