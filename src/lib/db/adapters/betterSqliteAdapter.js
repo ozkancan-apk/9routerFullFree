@@ -81,7 +81,7 @@ export function createBetterSqliteAdapter(filePath) {
       const stmt = prepare(sql);
       return stmt.all(...(Array.isArray(params) ? params : [params]));
     },
-    transaction: (fn) => db.transaction(fn),
+    transaction: (fn) => db.transaction(fn)(),
     pragma: (sql) => db.pragma(sql),
     close: () => {
       process.removeListener("beforeExit", onShutdown);

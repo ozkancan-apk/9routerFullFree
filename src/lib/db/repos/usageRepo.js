@@ -3,6 +3,12 @@ import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
 import { getMeta, setMeta } from "../helpers/metaStore.js";
 
+function maskApiKey(key) {
+  if (!key || typeof key !== "string") return null;
+  if (key.length <= 8) return key.charAt(0) + "***";
+  return key.slice(0, 8) + "***";
+}
+
 const PENDING_TIMEOUT_MS = 60 * 1000;
 const RING_CAP = 50;
 const CONN_CACHE_TTL_MS = 30 * 1000;
@@ -301,7 +307,7 @@ export async function getUsageHistory(filter = {}) {
 
   return rows.map((r) => ({
     timestamp: r.timestamp, provider: r.provider, model: r.model,
-    connectionId: r.connectionId, apiKey: r.apiKey, endpoint: r.endpoint,
+    connectionId: r.connectionId, apiKeyMasked: maskApiKey(r.apiKey), endpoint: r.endpoint,
     cost: r.cost, status: r.status, tokens: parseJson(r.tokens, {}),
   }));
 }
