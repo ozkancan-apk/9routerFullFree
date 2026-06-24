@@ -223,6 +223,7 @@ export function createSSEStream(options = {}) {
           streamDoneSent = true;
           if (keepsOpenAIResponsesFormat) openAIResponsesDoneSent = true;
           continue;
+        }
 
         // Claude format - content
         // Claude format - content
